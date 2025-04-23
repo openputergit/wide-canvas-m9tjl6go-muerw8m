@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Chat App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        .message-container {
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+        .message-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .message-container::-webkit-scrollbar-thumb {
+            background-color: rgba(156, 163, 175, 0.5);
+            border-radius: 3px;
+        }
+        .loading {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto p-4 max-w-4xl">
+        <div class="bg-white rounded-lg shadow-lg p-4">
+            <!-- Chat Header -->
+            <div class="border-b pb-4 mb-4">
+                <h1 class="text-2xl font-bold text-gray-800">Chat Room</h1>
+       
+            </div>
+
+            <!-- Messages Container -->
+            <div id="messages" class="message-container mb-4 p-4 bg-gray-50 rounded-lg">
+                <!-- Messages will be populated here -->
+            </div>
+
+            <!-- Input Area -->
+            <div class="border-t pt-4">
+                <div class="flex gap-2 mb-2">
+                    <button onclick="handleFileUpload('image')" class="p-2 text-blue-600 hover:bg-blue-50 rounded">
+                        <i class="bi bi-image"></i>
+                    </button>
+                    <button onclick="handleFileUpload('file')" class="p-2 text-blue-600 hover:bg-blue-50 rounded">
+                        <i class="bi bi-paperclip"></i>
+                    </button>
+                    <input type="file" id="fileInput" class="hidden" accept="image/*,.pdf,.doc,.docx">
+                </div>
+                <div class="flex gap-2">
+                    <input type="text" id="messageInput" class="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Type your message...">
+                    <button onclick="sendMessage()" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                        Send
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const appSlug = 'chat-app-' + Math.random().toString(36).substr(2, 9);
+        const userId = 'user-' + Math.random().toString(36).substr(2, 9);
+
+        // Initialize messages
+        let messages = [];
+
+        // Fetch messages every 2 seconds
+        async function fetchMessages() {
+            try {
+                const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer hryOj891uTPlHIw5tKkmbUF562E2',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        appSlug,
+                        action: 'read',
+                        collection: 'messages',
+                        conditions: {}
+                    })
+                });
+                const data = await response.json();
+                if (data.success && data.result) {
+                    messages = data.result;
+                    renderMessages();
+                }
+            } catch (error) {
+                console.error('Error fetching messages:', error);
+            }
+        }
+
+        // Render messages
+        function renderMessages() {
+            const messagesContainer = document.getElementById('messages');
+            messagesContainer.innerHTML = messages.map(msg => {
+                const isCurrentUser = msg.userId === userId;
+                const alignClass = isCurrentUser ? 'items-end' : 'items-start';
+                const bgColor = isCurrentUser ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800';
+
+                let content = '';
+                if (msg.type === 'text') {
+                    content = `<p class="break-words">${msg.content}</p>`;
+                } else if (msg.type === 'image') {
+                    content = `<img src="${msg.content}" alt="Shared image" class="max-w-xs rounded">`;
+                } else if (msg.type === 'file') {
+                    content = `<a href="${msg.content}" target="_blank" class="flex items-center gap-2 text-blue-600 hover:underline">
+                        <i class="bi bi-file-earmark"></i> ${msg.fileName}
+                    </a>`;
+                }
+
+                return `
+                    <div class="flex flex-col ${alignClass} mb-4">
+                        <div class="max-w-[70%] ${bgColor} rounded-lg p-3">
+                            ${content}
+                        </div>
+                        <span class="text-xs text-gray-500 mt-1">${new Date(msg.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                `;
+            }).join('');
+            
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Send message
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (message) {
+                try {
+                    const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer hryOj891uTPlHIw5tKkmbUF562E2',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            appSlug,
+                            action: 'create',
+                            collection: 'messages',
+                            data: {
+                                userId,
+                                type: 'text',
+                                content: message,
+                                timestamp: new Date().toISOString()
+                            }
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        input.value = '';
+                        await fetchMessages();
+                    }
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                }
+            }
+        }
+
+        // Handle file upload
+        async function handleFileUpload(type) {
+            const fileInput = document.getElementById('fileInput');
+            fileInput.accept = type === 'image' ? 'image/*' : '*/*';
+            fileInput.onchange = async function() {
+                const file = fileInput.files[0];
+                if (!file) return;
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('userId', userId);
+                    formData.append('appSlug', appSlug);
+
+                    const uploadResponse = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/storage/upload', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer hryOj891uTPlHIw5tKkmbUF562E2'
+                        },
+                        body: formData
+                    });
+
+                    const uploadResult = await uploadResponse.json();
+                    if (uploadResult.success) {
+                        await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'Bearer hryOj891uTPlHIw5tKkmbUF562E2',
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                appSlug,
+                                action: 'create',
+                                collection: 'messages',
+                                data: {
+                                    userId,
+                                    type: type === 'image' ? 'image' : 'file',
+                                    content: uploadResult.url,
+                                    fileName: file.name,
+                                    timestamp: new Date().toISOString()
+                                }
+                            })
+                        });
+                        
+                        await fetchMessages();
+                    }
+                } catch (error) {
+                    console.error('Error uploading file:', error);
+                }
+
+                fileInput.value = '';
+            };
+            fileInput.click();
+        }
+
+        // Enter key to send message
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Initial fetch and start polling
+        fetchMessages();
+        setInterval(fetchMessages, 2000);
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
